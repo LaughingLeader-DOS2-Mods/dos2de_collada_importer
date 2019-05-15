@@ -298,7 +298,7 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
 
         helper_preferences = context.user_preferences.addons["laughingleader_blender_helpers"].preferences
         if helper_preferences is not None:
-            debug_mode = getattr(helper_preferences, "debug_mode", False)
+            self.debug_mode = getattr(helper_preferences, "debug_mode", False)
         
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
