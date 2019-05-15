@@ -38,10 +38,11 @@ class DivinityImporterAddonPreferences(AddonPreferences):
         row = box.row()
         row.prop(self, "divine_path")
 
-def import_collada(operator, context, load_filepath, **args):
+def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
     action_set_fake_user = args["action_set_fake_user"]
-    delete_animation_extras = args["delete_animation_extras"]
+    gr2_conform_delete_armatures = args["gr2_conform_delete_armatures"]
+    gr2_conform_delete_meshes = args["gr2_conform_delete_meshes"]
 
     fix_orientation = args["fix_orientation"]
     auto_connect = args["auto_connect"]
@@ -53,16 +54,14 @@ def import_collada(operator, context, load_filepath, **args):
     #ignored_objects = list(filter(lambda obj: obj.type == "ARMATURE", context.scene.objects.values()))
     ignored_objects = context.scene.objects.values()
 
-    print("[DOS2DEImporter] Importing collada file: '{}'".format(load_filepath))
+    print("[DOS2DE-Importer] Importing collada file: '{}'".format(load_filepath))
 
     bpy.ops.wm.collada_import(filepath=load_filepath, fix_orientation=fix_orientation, import_units=import_units, 
         find_chains=find_chains, auto_connect=auto_connect, min_chain_length=min_chain_length, keep_bind_info=keep_bind_info)
 
-    return True
-
-    if rename_actions or action_set_fake_user or delete_animation_extras:
+    if rename_actions or action_set_fake_user:
         new_objects = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None, context.scene.objects.values()))
-        #print("[DOS2DEImporter] New Armature Objects {}".format(len(new_objects)))
+        #print("[DOS2DE-Importer] New Armature Objects {}".format(len(new_objects)))
 
         if len(new_objects) > 0:
             for ob in new_objects:
@@ -77,27 +76,28 @@ def import_collada(operator, context, load_filepath, **args):
 
                         if rename_actions:
                             new_name = bpy.path.display_name_from_filepath(load_filepath)
-                            operator.report({'INFO'}, "[DOS2DEImporter] Renamed action '{}' to '{}'.".format(action_name, new_name))
+                            if rename_temp:
+                                new_name = str.replace(new_name, "-temp", "")
+                            operator.report({'INFO'}, "[DOS2DE-Importer] Renamed action '{}' to '{}'.".format(action_name, new_name))
                             ob.animation_data.action.name = new_name
                             action_name = new_name
 
                         if action_set_fake_user:
                             action.use_fake_user = True
-                            print("[DOS2DEImporter] Enabled fake user for action '{}'.".format(action_name))
+                            print("[DOS2DE-Importer] Enabled fake user for action '{}'.".format(action_name))
+        else:
+            operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
 
-            if delete_animation_extras:
-                delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-                print("[DOS2DEImporter] Deleting '{}' new object from import.".format(len(delete_objects)))
-                for obj in delete_objects:
+        if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
+            delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+            #print("[DOS2DE-Importer] Deleting '{}' new objects from import.".format(len(delete_objects)))
+            for obj in delete_objects:
+                if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
                     index = bpy.data.objects.find(obj.name)
                     if index > -1:
                         obj_data = bpy.data.objects[index]
-                        print("[DOS2DEImporter] Deleting object '{}:{}'.".format(obj.name, obj.type))
+                        print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
                         bpy.data.objects.remove(obj_data)
-                    
-        else:
-            operator.report({'INFO'}, "[DOS2DEImporter] No new actions to rename.")
-
     return True
 
 def import_granny(operator, context, load_filepath, divine_path, **args):
@@ -114,7 +114,7 @@ def import_granny(operator, context, load_filepath, divine_path, **args):
     path_start = Path(load_filepath)
     dae_temp_path = Path(str(path_start.with_suffix("")) + "-temp.dae")
     if gr2_conform and conform_skeleton_path is not None and os.path.isfile(conform_skeleton_path):
-        gr2_options_str = "-e conform --conform-path \"{}\"".format(conform_skeleton_path)
+        gr2_options_str = "-e conform -e conform-copy --conform-path \"{}\"".format(conform_skeleton_path)
     else:
         gr2_options_str = ""
 
@@ -131,15 +131,15 @@ def import_granny(operator, context, load_filepath, divine_path, **args):
     
     if process.returncode != 0:
         #raise Exception("Error converting DAE to GR2: \"{}\"{}".format(process.stderr, process.stdout))
-        error_message = "[DOS2DEImporter] [ERROR:{}] Error converting GR2 to DAE. {}".format(process.returncode, '\n'.join(process.stdout.splitlines()[-1:]))
+        error_message = "[DOS2DE-Importer] [ERROR:{}] Error converting GR2 to DAE. {}".format(process.returncode, '\n'.join(process.stdout.splitlines()[-1:]))
         operator.report({"ERROR"}, error_message)
         print(error_message)
     else:
         #Deleta .dae
-        print("[DOS2DEImporter] Importing temp dae file: '{}'.".format(str(dae_temp_path)))
-        if import_collada(operator, context, str(dae_temp_path), **args):
+        print("[DOS2DE-Importer] Importing temp dae file: '{}'.".format(str(dae_temp_path)))
+        if import_collada(operator, context, load_filepath=str(dae_temp_path), rename_temp=True, **args):
             if delete_dae:
-                print("[DOS2DEImporter] Deleting temp file: '{}'.".format(str(dae_temp_path)))
+                print("[DOS2DE-Importer] Deleting temp file: '{}'.".format(str(dae_temp_path)))
                 os.remove(str(dae_temp_path))
             return True
         else:
@@ -156,20 +156,20 @@ def import_start(operator, context, load_filepath, **args):
     parts = os.path.splitext(load_filepath)
     ext = parts[1].lower()
 
-    print("[DOS2DEImporter] Importing file: '{}'.".format(load_filepath))
+    print("[DOS2DE-Importer] Importing file: '{}'.".format(load_filepath))
 
     # Ignore current armatures when renaming actions
     ignored_objects = list(filter(lambda obj: obj.type == "ARMATURE", context.scene.objects.values()))
-    #print("[DOS2DEImporter] Ignored Objects {}".format(len(ignored_objects)))
+    #print("[DOS2DE-Importer] Ignored Objects {}".format(len(ignored_objects)))
     if ext == ".dae":
         return import_collada(operator, context, load_filepath, **args)
     elif ext == ".gr2":
         if divine_path != "" and os.path.isfile(divine_path):
             return import_granny(operator, context, load_filepath, divine_path, **args)
         else:
-            operator.report({"ERROR"}, "[DOS2DEImporter] Failed to find divine.exe at path: '{}'. Canceling GR2 import.".format(divine_path))
+            operator.report({"ERROR"}, "[DOS2DE-Importer] Failed to find divine.exe at path: '{}'. Canceling GR2 import.".format(divine_path))
     else:
-        raise RuntimeError("[DOS2DEImporter] Unknown extension: %s" % ext)
+        raise RuntimeError("[DOS2DE-Importer] Unknown extension: %s" % ext)
         return False
     return True
 
@@ -201,7 +201,7 @@ class DOS2DEImporter_GR2_AddConformPath(Operator):
     def execute(self, context):
         if self.filepath != "":
             context.scene.dos2de_conform_skeleton_path = self.filepath
-            print("[DOS2DEImporter] Set pathway to '{}.'".format(self.filepath))
+            print("[DOS2DE-Importer] Set pathway to '{}.'".format(self.filepath))
             updated = True
         return {'FINISHED'}
 
@@ -237,11 +237,6 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             name="Set Fake User",
             description="Set a fake user on newly imported actions",
             default=True)
-
-    delete_animation_extras = BoolProperty(
-            name="Delete Animation Extras",
-            description="Automatically delete armature/meshes provided with animation files",
-            default=False)
 
     # Default Collada Import Options
     auto_connect = BoolProperty(
@@ -285,6 +280,16 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             description="When importing from gr2, conform the file to a specific skeleton",
             default=False)
 
+    gr2_conform_delete_armatures = BoolProperty(
+            name="Delete Extra Armatures",
+            description="When conforming, delete extra armatures that get created",
+            default=False)
+
+    gr2_conform_delete_meshes = BoolProperty(
+            name="Delete Extra Meshes",
+            description="When conforming, delete extra meshes that get created",
+            default=False)
+    
     def invoke(self, context, event):
         if context.scene.dos2de_conform_skeleton_path is not None and os.path.isfile(context.scene.dos2de_conform_skeleton_path):
             self.gr2_conform = True
@@ -324,6 +329,10 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.prop(context.scene, "dos2de_conform_skeleton_path")
         op = row.operator(DOS2DEImporter_GR2_AddConformPath.bl_idname, icon="IMPORT", text="")
         op.filepath = self.filepath
+        row = box.row()
+        row.prop(self, "gr2_conform_delete_armatures")
+        row = box.row()
+        row.prop(self, "gr2_conform_delete_meshes")
 
         box = layout.box()
         row = box.row(align=False)
@@ -332,8 +341,6 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.prop(self, "action_autorename")
         row = box.row()
         row.prop(self, "action_set_fake_user")
-        row = box.row()
-        row.prop(self, "delete_animation_extras")
 
         box = layout.box()
         row = box.row(align=False)
@@ -362,8 +369,8 @@ def register():
         bpy.types.INFO_MT_file_import.append(menu_func_import)
 
         bpy.types.Scene.dos2de_conform_skeleton_path = StringProperty(
-            name="Conform Path",
-            description="Conform the skeleton to the provided file",
+            name="Skeleton",
+            description="Conform the imported armature to this skeleton",
             default="")
     except: traceback.print_exc()
 
@@ -371,5 +378,5 @@ def unregister():
     try: 
         bpy.utils.unregister_module("dos2de_collada_importer")
         bpy.types.INFO_MT_file_import.remove(menu_func_import)
-        del bpy.types.Scene.dos2de_conform_skeleton_path
+        #del bpy.types.Scene.dos2de_conform_skeleton_path
     except: traceback.print_exc()
