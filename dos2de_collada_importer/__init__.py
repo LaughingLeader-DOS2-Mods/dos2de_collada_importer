@@ -287,12 +287,18 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             name="Delete Extra Meshes",
             description="When conforming, delete extra meshes that get created",
             default=False)
+
+    debug_mode = BoolProperty(default=False, options={"HIDDEN"})
     
     def invoke(self, context, event):
         if context.scene.dos2de_conform_skeleton_path is not None and os.path.isfile(context.scene.dos2de_conform_skeleton_path):
             self.gr2_conform = True
         else:
             self.gr2_conform = False
+
+        helper_preferences = context.user_preferences.addons["laughingleader_blender_helpers"].preferences
+        if helper_preferences is not None:
+            debug_mode = getattr(helper_preferences, "debug_mode", False)
         
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
