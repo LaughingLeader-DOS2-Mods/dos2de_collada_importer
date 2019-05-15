@@ -60,37 +60,35 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
         find_chains=find_chains, auto_connect=auto_connect, min_chain_length=min_chain_length, keep_bind_info=keep_bind_info)
 
     if rename_actions or action_set_fake_user:
-        new_objects = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None, context.scene.objects.values()))
-        #print("[DOS2DE-Importer] New Armature Objects {}".format(len(new_objects)))
-
+        new_objects = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None and not obj in ignored_objects, context.scene.objects.values()))
+        print("[DOS2DE-Importer] New Armature Objects {}".format(len(new_objects)))
         if len(new_objects) > 0:
             for ob in new_objects:
-                if not ob in ignored_objects:
-                    action = (ob.animation_data.action
-                        if ob.animation_data is not None and
-                        ob.animation_data.action is not None
-                        else None)
+                action = (ob.animation_data.action
+                    if ob.animation_data is not None and
+                    ob.animation_data.action is not None
+                    else None)
 
-                    if action is not None:
-                        action_name = action.name
+                if action is not None:
+                    action_name = action.name
 
-                        if rename_actions:
-                            new_name = bpy.path.display_name_from_filepath(load_filepath)
-                            if rename_temp:
-                                new_name = str.replace(new_name, "-temp", "")
-                            operator.report({'INFO'}, "[DOS2DE-Importer] Renamed action '{}' to '{}'.".format(action_name, new_name))
-                            ob.animation_data.action.name = new_name
-                            action_name = new_name
+                    if rename_actions:
+                        new_name = bpy.path.display_name_from_filepath(load_filepath)
+                        if rename_temp:
+                            new_name = str.replace(new_name, "-temp", "")
+                        operator.report({'INFO'}, "[DOS2DE-Importer] Renamed action '{}' to '{}'.".format(action_name, new_name))
+                        ob.animation_data.action.name = new_name
+                        action_name = new_name
 
-                        if action_set_fake_user:
-                            action.use_fake_user = True
-                            print("[DOS2DE-Importer] Enabled fake user for action '{}'.".format(action_name))
+                    if action_set_fake_user:
+                        action.use_fake_user = True
+                        print("[DOS2DE-Importer] Enabled fake user for action '{}'.".format(action_name))
         else:
             operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
 
         if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
             delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-            #print("[DOS2DE-Importer] Deleting '{}' new objects from import.".format(len(delete_objects)))
+            print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
             for obj in delete_objects:
                 if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
                     index = bpy.data.objects.find(obj.name)
@@ -323,10 +321,17 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.label(text="GR2 Import Options:", icon="MESH_DATA")
         row = box.row()
         row.prop(self, "gr2_delete_dae")
+
         row = box.row()
-        row.prop(self, "gr2_conform")
+        box = row.box()
         row = box.row()
-        row.prop(context.scene, "dos2de_conform_skeleton_path")
+        row.label("Conform Options: ", icon="MOD_ARMATURE")
+        row = box.row()
+        row.prop(self, "gr2_conform", text="Enable Conforming")
+        row = box.row()
+        row.label("Skeleton: ")
+        row = box.row()
+        row.prop(context.scene, "dos2de_conform_skeleton_path", text="")
         op = row.operator(DOS2DEImporter_GR2_AddConformPath.bl_idname, icon="IMPORT", text="")
         op.filepath = self.filepath
         row = box.row()
