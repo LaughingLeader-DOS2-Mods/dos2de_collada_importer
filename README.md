@@ -1,6 +1,6 @@
 # DOS2DE Collada Importer for Blender 2.79
 
-An addon for Blender that allows you to import dae/gr2 files for the game Divinity: Original Sin 2 - Definitive Edition.
+An addon for Blender 2.79 that allows you to import dae/gr2 files for the game Divinity: Original Sin 2 - Definitive Edition.
 
 ## Features:  
 * Import from dae, or import from gr2 if the path to divine.exe is set.

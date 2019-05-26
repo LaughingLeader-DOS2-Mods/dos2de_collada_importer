@@ -38,6 +38,29 @@ class DivinityImporterAddonPreferences(AddonPreferences):
         row = box.row()
         row.prop(self, "divine_path")
 
+def transform_apply(self, context, obj, location=False, rotation=False, scale=False, children=False):
+    last_active = getattr(bpy.context.scene.objects, "active", None)
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.scene.objects.active = obj
+    obj.select = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+
+    recurse_targets = []
+    if children:
+        for childobj in obj.children:
+            childobj.select = True
+            if childobj.children is not None:
+                recurse_targets.append(childobj)
+        bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+        bpy.ops.object.select_all(action='DESELECT')
+    obj.select = False
+    bpy.context.scene.objects.active = last_active
+
+    if len(recurse_targets) > 0:
+        for recobj in recurse_targets:
+            transform_apply(self, context, recobj, location, rotation, scale, children)
+
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
     action_set_fake_user = args["action_set_fake_user"]
@@ -49,6 +72,7 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     find_chains = args["find_chains"]
     min_chain_length = args["min_chain_length"]
     import_units = args["import_units"]
+    apply_transformation = args["apply_transformation"]
     keep_bind_info = args["keep_bind_info"]
 
     #ignored_objects = list(filter(lambda obj: obj.type == "ARMATURE", context.scene.objects.values()))
@@ -84,7 +108,8 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                         action.use_fake_user = True
                         print("[DOS2DE-Importer] Enabled fake user for action '{}'.".format(action_name))
         else:
-            operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
+            #operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
+            pass
 
         if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
             delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
@@ -96,6 +121,13 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                         obj_data = bpy.data.objects[index]
                         print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
                         bpy.data.objects.remove(obj_data)
+
+        if apply_transformation:
+            new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+            for obj in new_objects:
+                if not obj.parent:
+                    print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
+                    transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
     return True
 
 def import_granny(operator, context, load_filepath, divine_path, **args):
@@ -237,10 +269,15 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             default=True)
 
     # Default Collada Import Options
+    apply_transformation = BoolProperty(
+            name="Apply Transformations",
+            description="Apply all object transformations on imported objects. Useful if the model is y-up, which comes with a X 90 rotation",
+            default=True)
+
     auto_connect = BoolProperty(
             name="Auto Connect",
             description="Set use_connect for parent bones which have exactly one child bone",
-            default=True)
+            default=False)
 
     find_chains = BoolProperty(
             name="Find Bone Chains",
@@ -321,6 +358,8 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.label(text="Import Data Options:", icon="MESH_DATA")
         row = box.row()
         row.prop(self, "import_units")
+        row = box.row()
+        row.prop(self, "apply_transformation")
 
         box = layout.box()
         row = box.row(align=False)
