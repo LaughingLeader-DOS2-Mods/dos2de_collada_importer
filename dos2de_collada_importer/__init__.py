@@ -4,7 +4,7 @@ bl_info = {
     "blender": (2, 7, 9),
     "api": 38691,
     "location": "File > Import-Export",
-    "description": ("Import DAE files."),
+    "description": ("Import Collada/Granny files for Divinity: Original Sin 2 - Definitive Edition."),
     "warning": "",
     "wiki_url": (""),
     "tracker_url": "",
@@ -333,9 +333,10 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         else:
             self.gr2_conform = False
 
-        helper_preferences = context.user_preferences.addons["laughingleader_blender_helpers"].preferences
-        if helper_preferences is not None:
-            self.debug_mode = getattr(helper_preferences, "debug_mode", False)
+        if "laughingleader_blender_helpers" in context.user_preferences.addons:
+            helper_preferences = context.user_preferences.addons["laughingleader_blender_helpers"].preferences
+            if helper_preferences is not None:
+                self.debug_mode = getattr(helper_preferences, "debug_mode", False)
         
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
