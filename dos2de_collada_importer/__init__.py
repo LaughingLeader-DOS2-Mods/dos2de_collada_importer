@@ -142,14 +142,14 @@ def import_granny(operator, context, load_filepath, divine_path, **args):
 
     from pathlib import Path
     path_start = Path(load_filepath)
-    dae_temp_path = Path(str(path_start.with_suffix("")) + "-temp.dae")
+    dae_temp_path = str(Path(str(path_start.with_suffix("")) + "-temp.dae"))
     if gr2_conform and conform_skeleton_path is not None and os.path.isfile(conform_skeleton_path):
         gr2_options_str = "-e conform -e conform-copy --conform-path \"{}\"".format(conform_skeleton_path)
     else:
         gr2_options_str = ""
 
     proccess_args = "{} --loglevel all -g dos2de -s \"{}\" -d \"{}\" -i gr2 -o dae -a convert-model {}".format(
-        divine_exe, load_filepath, str(dae_temp_path), gr2_options_str)
+        divine_exe, load_filepath, dae_temp_path, gr2_options_str)
 
     print("Starting GR2->DAE conversion using divine.exe.")
     print("Sending command: {}".format(proccess_args))
@@ -166,11 +166,12 @@ def import_granny(operator, context, load_filepath, divine_path, **args):
         print(error_message)
     else:
         #Deleta .dae
-        print("[DOS2DE-Importer] Importing temp dae file: '{}'.".format(str(dae_temp_path)))
-        if import_collada(operator, context, load_filepath=str(dae_temp_path), rename_temp=True, **args):
+        print("[DOS2DE-Importer] Importing temp dae file: '{}'.".format(dae_temp_path))
+        if import_collada(operator, context, load_filepath=dae_temp_path, rename_temp=True, **args):
             if delete_dae:
-                print("[DOS2DE-Importer] Deleting temp file: '{}'.".format(str(dae_temp_path)))
-                os.remove(str(dae_temp_path))
+                print("[DOS2DE-Importer] Deleting temp file: '{}'.".format(dae_temp_path))
+                if os.path.isfile(dae_temp_path):
+                    os.remove(dae_temp_path)
             return True
         else:
             print("Failed?")
