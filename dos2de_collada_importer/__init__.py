@@ -111,6 +111,12 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
             #operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
             pass
 
+        if apply_transformation:
+            new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+            for obj in new_objects:
+                print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
+                transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
+
         if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
             delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
             print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
@@ -122,12 +128,6 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                         print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
                         bpy.data.objects.remove(obj_data)
 
-        if apply_transformation:
-            new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-            for obj in new_objects:
-                if not obj.parent:
-                    print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
-                    transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
     return True
 
 def import_granny(operator, context, load_filepath, divine_path, **args):
