@@ -86,6 +86,12 @@ def get_base_skeletons(scene, context):
     return skeletons
 
 class DOS2DEImporterSettings(PropertyGroup):
+
+    apply_transformation = BoolProperty(
+        name="Apply Transformations",
+        description="Apply all object transformations on imported objects. Useful if the model is y-up, which comes with a X 90 rotation",
+        default=True)
+    
     gr2_conform_enabled = BoolProperty(
         name="Conform",
         description="When importing from gr2, conform the file to a specific skeleton",
@@ -449,6 +455,7 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
     def invoke(self, context, event):
         dos2de_importer_settings = getattr(context.scene, "dos2de_importer_settings", None)
         if dos2de_importer_settings is not None:
+            self.apply_transformation = dos2de_importer_settings.apply_transformation
             self.gr2_conform_enabled = dos2de_importer_settings.gr2_conform_enabled
             self.gr2_base_skeleton = dos2de_importer_settings.gr2_base_skeleton
             self.gr2_conform_delete_armatures = dos2de_importer_settings.gr2_conform_delete_armatures
@@ -471,6 +478,7 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         dos2de_importer_settings = getattr(context.scene, "dos2de_importer_settings", None)
         if dos2de_importer_settings is not None:
+            dos2de_importer_settings.apply_transformation = self.apply_transformation
             dos2de_importer_settings.gr2_conform_enabled = self.gr2_conform_enabled
             dos2de_importer_settings.gr2_base_skeleton = self.gr2_base_skeleton
             dos2de_importer_settings.gr2_conform_delete_armatures = self.gr2_conform_delete_armatures
