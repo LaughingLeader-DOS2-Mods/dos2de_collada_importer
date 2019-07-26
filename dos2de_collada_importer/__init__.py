@@ -15,7 +15,7 @@ import bpy
 
 from bpy.path import display_name_from_filepath
 from bpy.types import Operator, OperatorFileListElement, AddonPreferences, PropertyGroup
-from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, EnumProperty
+from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, EnumProperty, PointerProperty
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 
 import os
@@ -44,6 +44,73 @@ class DivinityImporterAddonPreferences(AddonPreferences):
         row = box.row()
         row.prop(self, "divine_path")
         row.prop(self, "extracted_assets_dir")
+
+
+base_skeleton_directories = ["Dwarves", "Elves", "Humans", "Lizards"]
+base_skeleton_dict = {}
+
+def get_base_skeletons(scene, context):
+    assets_dir = ""
+    if "dos2de_collada_importer" in context.user_preferences.addons:
+        preferences = context.user_preferences.addons["dos2de_collada_importer"].preferences
+        if preferences is not None:
+            if "extracted_assets_dir" in preferences:
+                assets_dir = preferences.extracted_assets_dir
+    
+    skeletons = [("DISABLED", "Disabled", "")]
+    skeletons.append(("AUTO", "Auto", "Auto-select a base skeleton to conform to, based on the file name.\nThis happens when importing, to support multiple imports"))
+
+    if assets_dir != "" and os.path.isdir(assets_dir):
+        characters_dir = os.path.join(assets_dir, "Characters")
+        if os.path.isdir(characters_dir):
+            for race in base_skeleton_directories:
+                race_dir = os.path.join(characters_dir, race)
+                if os.path.isdir(race_dir):
+                    base_skeleton_f = os.path.join(race_dir, race + "_Female_Base.gr2")
+                    base_skeleton_m = os.path.join(race_dir, race + "_Male_Base.gr2")
+
+                    global base_skeleton_dict
+
+                    if os.path.isfile(base_skeleton_f):
+                        key = race + "_Female"
+                        display = race + " Female"
+                        skeletons.append((key, display, base_skeleton_f))
+                        base_skeleton_dict[key] = (base_skeleton_f, race, "Female")
+
+                    if os.path.isfile(base_skeleton_m):
+                        key = race + "_Male"
+                        display = race + " Male"
+                        skeletons.append((key, display, base_skeleton_m))
+                        base_skeleton_dict[key] = (base_skeleton_m, race, "Male")
+
+    return skeletons
+
+class DOS2DEImporterSettings(PropertyGroup):
+    gr2_conform_enabled = BoolProperty(
+        name="Conform",
+        description="When importing from gr2, conform the file to a specific skeleton",
+        default=False)
+
+    gr2_base_skeleton = EnumProperty(
+        name="Base Skeletons",
+        description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
+        items=get_base_skeletons
+    )
+
+    dos2de_conform_skeleton_path = StringProperty(
+        name="Skeleton",
+        description="Conform the imported armature to this skeleton",
+        default="")
+
+    gr2_conform_delete_armatures = BoolProperty(
+            name="Delete Extra Armatures",
+            description="When conforming, delete extra armatures that get created",
+            default=False)
+
+    gr2_conform_delete_meshes = BoolProperty(
+            name="Delete Extra Meshes",
+            description="When conforming, delete extra meshes that get created",
+            default=False)
 
 def transform_apply(self, context, obj, location=False, rotation=False, scale=False, children=False):
     last_active = getattr(bpy.context.scene.objects, "active", None)
@@ -279,71 +346,6 @@ class DOS2DEImporter_GR2_AddConformPath(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-base_skeleton_directories = ["Dwarves", "Elves", "Humans", "Lizards"]
-base_skeleton_dict = {}
-
-def get_base_skeletons(scene, context):
-    assets_dir = ""
-    if "dos2de_collada_importer" in context.user_preferences.addons:
-        preferences = context.user_preferences.addons["dos2de_collada_importer"].preferences
-        if preferences is not None:
-            if "extracted_assets_dir" in preferences:
-                assets_dir = preferences.extracted_assets_dir
-    
-    skeletons = [("DISABLED", "Disabled", "")]
-    skeletons.append(("AUTO", "Auto", "Auto-select a base skeleton to conform to, based on the file name.\nThis happens when importing, to support multiple imports"))
-
-    if assets_dir != "" and os.path.isdir(assets_dir):
-        characters_dir = os.path.join(assets_dir, "Characters")
-        if os.path.isdir(characters_dir):
-            for race in base_skeleton_directories:
-                race_dir = os.path.join(characters_dir, race)
-                if os.path.isdir(race_dir):
-                    base_skeleton_f = os.path.join(race_dir, race + "_Female_Base.gr2")
-                    base_skeleton_m = os.path.join(race_dir, race + "_Male_Base.gr2")
-
-                    global base_skeleton_dict
-
-                    if os.path.isfile(base_skeleton_f):
-                        key = race + "_Female"
-                        display = race + " Female"
-                        skeletons.append((key, display, base_skeleton_f))
-                        base_skeleton_dict[key] = (base_skeleton_f, race, "Female")
-
-                    if os.path.isfile(base_skeleton_m):
-                        key = race + "_Male"
-                        display = race + " Male"
-                        skeletons.append((key, display, base_skeleton_m))
-                        base_skeleton_dict[key] = (base_skeleton_m, race, "Male")
-
-    return skeletons
-
-class DOS2DEImporterSettings(PropertyGroup):
-    gr2_conform_enabled = BoolProperty(
-        name="Conform",
-        description="When importing from gr2, conform the file to a specific skeleton",
-        default=False)
-
-    gr2_base_skeleton = EnumProperty(
-        name="Base Skeletons",
-        description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
-    )
-
-    dos2de_conform_skeleton_path = StringProperty(
-        name="Skeleton",
-        description="Conform the imported armature to this skeleton",
-        default="")
-
-    gr2_conform_delete_armatures = BoolProperty(
-            name="Delete Extra Armatures",
-            description="When conforming, delete extra armatures that get created",
-            default=False)
-
-    gr2_conform_delete_meshes = BoolProperty(
-            name="Delete Extra Meshes",
-            description="When conforming, delete extra meshes that get created",
-            default=False)
-
 class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
     """Load a Divinity .dae file"""
     bl_idname = "import_scene.divinitycollada"
@@ -574,7 +576,10 @@ def register():
         bpy.utils.register_module("dos2de_collada_importer")
         bpy.types.INFO_MT_file_import.append(menu_func_import)
 
-        bpy.types.Scene.dos2de_importer_settings = PointerProperty(type=DOS2DEImporterSettings)
+        bpy.types.Scene.dos2de_importer_settings = PointerProperty(type=DOS2DEImporterSettings, 
+            name="DOS2DE Import Settings",
+            description="Persistent settings saved between imports for this specific scene"
+        )
 
     except: traceback.print_exc()
 
