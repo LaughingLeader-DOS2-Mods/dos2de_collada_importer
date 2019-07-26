@@ -27,13 +27,13 @@ class DivinityImporterAddonPreferences(AddonPreferences):
     divine_path = StringProperty(
         name="Divine Path",
         description="The path to divine.exe, used to convert from gr2 to dae",
-        subtype='FILE_PATH',
+        subtype="FILE_PATH"
     )
 
     extracted_assets_dir = StringProperty(
         name="Shared Assets",
         description="The path to extracted assets from Shared.pak. This should be Public/Shared/Assets.\nThis is used to automatically fetch conforming skeletons",
-        subtype='DIR_PATH',
+        subtype="DIR_PATH"
     )
 
     def draw(self, context):
@@ -88,34 +88,42 @@ def get_base_skeletons(scene, context):
 class DOS2DEImporterSettings(PropertyGroup):
 
     apply_transformation = BoolProperty(
-        name="Apply Transformations",
-        description="Apply all object transformations on imported objects. Useful if the model is y-up, which comes with a X 90 rotation",
-        default=True)
-    
+            name="Apply Transformations",
+            description="Apply all object transformations on imported objects. Useful if the model is y-up, which comes with a X 90 rotation",
+            default=True)
+
+    gr2_delete_dae = BoolProperty(
+            name="Delete DAE",
+            description="When importing from gr2, delete the temporary .dae file that gets created",
+            default=True)
+
     gr2_conform_enabled = BoolProperty(
-        name="Conform",
-        description="When importing from gr2, conform the file to a specific skeleton",
-        default=False)
+            name="Conform",
+            description="When importing from gr2, conform the file to a specific skeleton",
+            default=False)
 
     gr2_base_skeleton = EnumProperty(
-        name="Base Skeletons",
-        description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
-        items=get_base_skeletons
-    )
+            name="Base Skeletons",
+            description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
+            items=get_base_skeletons)
 
-    dos2de_conform_skeleton_path = StringProperty(
-        name="Skeleton",
-        description="Conform the imported armature to this skeleton",
-        default="")
+    gr2_conform_skeleton_path = StringProperty(
+            name="Skeleton",
+            description="Conform the imported armature to the target skeleton",
+            default="")
+
+    conform_path_changed = BoolProperty(
+            options={"HIDDEN"},
+            default=False)
 
     gr2_conform_delete_armatures = BoolProperty(
-            name="Delete Extra Armatures",
-            description="When conforming, delete extra armatures that get created",
+            name="Delete Armatures",
+            description="When conforming, delete armatures that get created",
             default=False)
 
     gr2_conform_delete_meshes = BoolProperty(
-            name="Delete Extra Meshes",
-            description="When conforming, delete extra meshes that get created",
+            name="Delete Meshes",
+            description="When conforming, delete meshes that get created",
             default=False)
 
 def transform_apply(self, context, obj, location=False, rotation=False, scale=False, children=False):
@@ -215,7 +223,7 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
 def import_granny(operator, context, load_filepath, divine_path, **args):
     gr2_conform_enabled = args["gr2_conform_enabled"]
     if gr2_conform_enabled == True:
-        conform_skeleton_path = args["dos2de_conform_skeleton_path"]
+        conform_skeleton_path = args["gr2_conform_skeleton_path"]
 
         base_skeleton = args["gr2_base_skeleton"]
         autoselect = base_skeleton != None and base_skeleton == "AUTO"
@@ -344,7 +352,8 @@ class DOS2DEImporter_GR2_AddConformPath(Operator):
 
     def execute(self, context):
         if self.filepath != "":
-            context.scene.dos2de_conform_skeleton_path = self.filepath
+            context.scene.gr2_conform_skeleton_path = self.filepath
+            context.scene.conform_path_changed = True
             print("[DOS2DE-Importer] Set pathway to '{}.'".format(self.filepath))
             updated = True
         return {'FINISHED'}
@@ -425,29 +434,34 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             description="When importing from gr2, delete the temporary .dae file that gets created",
             default=True)
 
+    gr2_set_skeleton = BoolProperty(
+        name="Skeleton:",
+        description="Set the skeleton to conform to",
+        default=True)
+
     gr2_conform_enabled = BoolProperty(
-        name="Conform",
-        description="When importing from gr2, conform the file to a specific skeleton",
-        default=False)
+            name="Conform",
+            description="When importing from gr2, conform the file to a specific skeleton",
+            default=False)
 
     gr2_base_skeleton = EnumProperty(
-        name="Base Skeletons",
-        description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
-    )
+            name="Base",
+            description="Auto-detected skeletons that can be used when conforming.\nThis setting will override the conform path set",
+            items=get_base_skeletons)
 
-    dos2de_conform_skeleton_path = StringProperty(
-        name="Skeleton",
-        description="Conform the imported armature to this skeleton",
-        default="")
+    gr2_conform_skeleton_path = StringProperty(
+            name="Manual",
+            description="Conform the imported armature to the target skeleton",
+            default="")
 
     gr2_conform_delete_armatures = BoolProperty(
-            name="Delete Extra Armatures",
-            description="When conforming, delete extra armatures that get created",
+            name="Delete Armatures",
+            description="When conforming, delete armatures that get created",
             default=False)
 
     gr2_conform_delete_meshes = BoolProperty(
-            name="Delete Extra Meshes",
-            description="When conforming, delete extra meshes that get created",
+            name="Delete Meshes",
+            description="When conforming, delete meshes that get created",
             default=False)
 
     debug_mode = BoolProperty(default=False, options={"HIDDEN"})
@@ -461,11 +475,12 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             self.gr2_conform_delete_armatures = dos2de_importer_settings.gr2_conform_delete_armatures
             self.gr2_conform_delete_meshes = dos2de_importer_settings.gr2_conform_delete_meshes
             self.gr2_delete_dae = dos2de_importer_settings.gr2_delete_dae
+            self.gr2_conform_skeleton_path = dos2de_importer_settings.gr2_conform_skeleton_path
 
-        if context.scene.dos2de_conform_skeleton_path is not None and os.path.isfile(context.scene.dos2de_conform_skeleton_path):
+        if self.gr2_conform_skeleton_path != "" and os.path.isfile(self.gr2_conform_skeleton_path):
             pass
         else:
-            context.scene.gr2_conform_enabled = False
+            self.gr2_conform_enabled = False
 
         if "laughingleader_blender_helpers" in context.user_preferences.addons:
             helper_preferences = context.user_preferences.addons["laughingleader_blender_helpers"].preferences
@@ -484,6 +499,10 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             dos2de_importer_settings.gr2_conform_delete_armatures = self.gr2_conform_delete_armatures
             dos2de_importer_settings.gr2_conform_delete_meshes = self.gr2_conform_delete_meshes
             dos2de_importer_settings.gr2_delete_dae = self.gr2_delete_dae
+
+            if dos2de_importer_settings.conform_path_changed:
+                self.gr2_conform_skeleton_path = dos2de_importer_settings.gr2_conform_skeleton_path
+                dos2de_importer_settings.conform_path_changed = False
             print("[DOS2DE-Importer] Saved importer settings to scene.")
 
         keywords = self.as_keywords()
@@ -532,24 +551,32 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.prop(self, "gr2_delete_dae")
 
         row = box.row()
-        box = row.box()
-        row = box.row()
-        row.label("Conform Options: ", icon="MOD_ARMATURE")
-        row = box.row()
-        row.prop(self, "gr2_conform_enabled", text="Enable Conforming")
-        row = box.row()
-        row.label("Skeleton: ")
-        row = box.row()
-        row.prop(self, "gr2_base_skeleton")
-        row = box.row()
-        row.prop(self, "dos2de_conform_skeleton_path", text="")
-        op = row.operator(DOS2DEImporter_GR2_AddConformPath.bl_idname, icon="IMPORT", text="")
-        op.filepath = self.filepath
-        row = box.row()
-        row.prop(self, "gr2_conform_delete_armatures")
-        row = box.row()
-        row.prop(self, "gr2_conform_delete_meshes")
+        row.prop(self, "gr2_conform_enabled", text="Enable Conforming", toggle=True)
+        if self.gr2_conform_enabled:
+            row = box.row()
+            box = row.box()
+            row = box.row()
+            row.label("Conform Options: ", icon="MOD_ARMATURE")
+            row = box.row()
+            row.prop(self, "gr2_conform_delete_armatures")
+            row = box.row()
+            row.prop(self, "gr2_conform_delete_meshes")
+            row = box.row()
+            row.prop(self, "gr2_set_skeleton", toggle=True)
+            if self.gr2_set_skeleton:
+                skeleton_box = box.row().box()
+                row = skeleton_box.row()
+                row.label("Use Skeleton: ")
+                row = skeleton_box.row()
+                row.prop(self, "gr2_base_skeleton", text="")
+                row = skeleton_box.row()
+                row.label("Manual Path: ")
+                row = skeleton_box.row()
+                row.prop(context.scene.dos2de_importer_settings, "gr2_conform_skeleton_path", text="")
+                op = row.operator(DOS2DEImporter_GR2_AddConformPath.bl_idname, icon="IMPORT", text="")
+                op.filepath = self.filepath
 
+        row = box.row()
         box = layout.box()
         row = box.row(align=False)
         row.label(text="Animation Options:", icon="ANIM_DATA")
@@ -595,5 +622,5 @@ def unregister():
     try: 
         bpy.utils.unregister_module("dos2de_collada_importer")
         bpy.types.INFO_MT_file_import.remove(menu_func_import)
-        #del bpy.types.Scene.dos2de_conform_skeleton_path
+        #del bpy.types.Scene.gr2_conform_skeleton_path
     except: traceback.print_exc()
