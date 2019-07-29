@@ -253,7 +253,7 @@ def import_granny(operator, context, load_filepath, divine_path, **args):
                     print("    [DOS2DE-Importer] No auto base skeleton found.")
 
             else:
-                check_path = base_skeleton_dict[base_skeleton]
+                check_path = base_skeleton_dict[base_skeleton][0]
                 if os.path.isfile(check_path):
                     conform_skeleton_path = check_path
                     print("[DOS2DE-Importer] Using base skeleton '{}'.".format(conform_skeleton_path))
