@@ -154,6 +154,7 @@ def transform_apply(self, context, obj, location=False, rotation=False, scale=Fa
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
     action_set_fake_user = args["action_set_fake_user"]
+    gr2_conform_enabled = args["gr2_conform_enabled"]
     gr2_conform_delete_armatures = args["gr2_conform_delete_armatures"]
     gr2_conform_delete_meshes = args["gr2_conform_delete_meshes"]
 
