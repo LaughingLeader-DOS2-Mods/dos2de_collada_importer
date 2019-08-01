@@ -207,16 +207,17 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                 print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
                 transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
 
-        if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
-            delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-            print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
-            for obj in delete_objects:
-                if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
-                    index = bpy.data.objects.find(obj.name)
-                    if index > -1:
-                        obj_data = bpy.data.objects[index]
-                        print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
-                        bpy.data.objects.remove(obj_data)
+        if gr2_conform_enabled:
+            if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
+                delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+                print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
+                for obj in delete_objects:
+                    if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
+                        index = bpy.data.objects.find(obj.name)
+                        if index > -1:
+                            obj_data = bpy.data.objects[index]
+                            print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
+                            bpy.data.objects.remove(obj_data)
 
     return True
 
@@ -477,7 +478,7 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
             self.gr2_delete_dae = dos2de_importer_settings.gr2_delete_dae
             self.gr2_conform_skeleton_path = dos2de_importer_settings.gr2_conform_skeleton_path
 
-        if self.gr2_conform_skeleton_path != "" and os.path.isfile(self.gr2_conform_skeleton_path):
+        if (self.gr2_conform_skeleton_path != "" and os.path.isfile(self.gr2_conform_skeleton_path)) or self.gr2_base_skeleton != "DISABLED":
             pass
         else:
             self.gr2_conform_enabled = False
