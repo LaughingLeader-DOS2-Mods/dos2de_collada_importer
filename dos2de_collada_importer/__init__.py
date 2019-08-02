@@ -154,6 +154,7 @@ def transform_apply(self, context, obj, location=False, rotation=False, scale=Fa
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
     action_set_fake_user = args["action_set_fake_user"]
+    action_offset_zero = args["action_offset_zero"]
     gr2_conform_enabled = args["gr2_conform_enabled"]
     gr2_conform_delete_armatures = args["gr2_conform_delete_armatures"]
     gr2_conform_delete_meshes = args["gr2_conform_delete_meshes"]
@@ -174,11 +175,12 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     bpy.ops.wm.collada_import(filepath=load_filepath, fix_orientation=fix_orientation, import_units=import_units, 
         find_chains=find_chains, auto_connect=auto_connect, min_chain_length=min_chain_length, keep_bind_info=keep_bind_info)
 
-    if rename_actions or action_set_fake_user:
-        new_objects = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None and not obj in ignored_objects, context.scene.objects.values()))
-        print("[DOS2DE-Importer] New Armature Objects {}".format(len(new_objects)))
-        if len(new_objects) > 0:
-            for ob in new_objects:
+    new_armatures = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None and not obj in ignored_objects, context.scene.objects.values()))
+    if len(new_armatures) > 0:
+        parse_actions = action_offset_zero or rename_actions or action_set_fake_user
+        if parse_actions:
+            print("[DOS2DE-Importer] New Armature Objects: ({}). Parsing actions".format(len(new_armatures)))
+            for ob in new_armatures:
                 action = (ob.animation_data.action
                     if ob.animation_data is not None and
                     ob.animation_data.action is not None
@@ -198,13 +200,20 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                     if action_set_fake_user:
                         action.use_fake_user = True
                         print("[DOS2DE-Importer] Enabled fake user for action '{}'.".format(action_name))
+
+                    if action_offset_zero:
+                        fcurves = ob.animation_data.action.fcurves
+                        for fc in fcurves:
+                            for keyframe in fc.keyframe_points:
+                                keyframe.co.x += 1
+
         else:
             #operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
             pass
 
         if apply_transformation:
-            new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-            for obj in new_objects:
+            new_armatures = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+            for obj in new_armatures:
                 print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
                 transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
 
@@ -392,6 +401,11 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
     action_set_fake_user = BoolProperty(
             name="Set Fake User",
             description="Set a fake user on newly imported actions",
+            default=True)
+
+    action_offset_zero = BoolProperty(
+            name="Start at Frame 1",
+            description="Offset animation start frames to begin at frame 1 (Blender's default)",
             default=True)
 
     # Default Collada Import Options
@@ -584,6 +598,8 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         row.label(text="Animation Options:", icon="ANIM_DATA")
         row = box.row()
         row.prop(self, "action_autorename")
+        row = box.row()
+        row.prop(self, "action_offset_zero")
         row = box.row()
         row.prop(self, "action_set_fake_user")
 
