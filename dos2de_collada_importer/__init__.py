@@ -175,10 +175,10 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     bpy.ops.wm.collada_import(filepath=load_filepath, fix_orientation=fix_orientation, import_units=import_units, 
         find_chains=find_chains, auto_connect=auto_connect, min_chain_length=min_chain_length, keep_bind_info=keep_bind_info)
 
-    new_armatures = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None and not obj in ignored_objects, context.scene.objects.values()))
-    if len(new_armatures) > 0:
-        parse_actions = action_offset_zero or rename_actions or action_set_fake_user
-        if parse_actions:
+    parse_actions = action_offset_zero or rename_actions or action_set_fake_user
+    if parse_actions:
+        new_armatures = list(filter(lambda obj: obj.type == "ARMATURE" and obj.animation_data != None and not obj in ignored_objects, context.scene.objects.values()))
+        if len(new_armatures) > 0:
             print("[DOS2DE-Importer] New Armature Objects: ({}). Parsing actions".format(len(new_armatures)))
             for ob in new_armatures:
                 action = (ob.animation_data.action
@@ -211,23 +211,23 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
             #operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
             pass
 
-        if apply_transformation:
-            new_armatures = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-            for obj in new_armatures:
-                print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
-                transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
+    if apply_transformation:
+        new_armatures = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+        for obj in new_armatures:
+            print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
+            transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
 
-        if gr2_conform_enabled:
-            if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
-                delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
-                print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
-                for obj in delete_objects:
-                    if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
-                        index = bpy.data.objects.find(obj.name)
-                        if index > -1:
-                            obj_data = bpy.data.objects[index]
-                            print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
-                            bpy.data.objects.remove(obj_data)
+    if gr2_conform_enabled:
+        if gr2_conform_delete_armatures or gr2_conform_delete_meshes:
+            delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+            print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
+            for obj in delete_objects:
+                if gr2_conform_delete_armatures and obj.type == "ARMATURE" or gr2_conform_delete_meshes and obj.type == "MESH":
+                    index = bpy.data.objects.find(obj.name)
+                    if index > -1:
+                        obj_data = bpy.data.objects[index]
+                        print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
+                        bpy.data.objects.remove(obj_data)
 
     return True
 
