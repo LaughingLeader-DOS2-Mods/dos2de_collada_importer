@@ -14,7 +14,7 @@ An addon for Blender 2.79 that allows you to import dae/gr2 files for the game D
 * Download this repository as a zip (using the green Clone or download button).
 * Save the addon somewhere where you can find it again.
 * Extract the zip.
-* Copy the folder `dos2de_collada_importer`. Make sure this is the folder with the scripts under it (dos2de_collada_importer\__init__.py etc).
+* Copy the folder `dos2de_collada_importer`. Make sure this is the folder with the scripts under it (`dos2de_collada_importer\__init__.py` etc).
 * Paste the `dos2de_collada_importer` folder into your addons folder. Default pathway:
 ```
 C:\Users\Username\AppData\Roaming\Blender Foundation\Blender\2.79\scripts\addons\
