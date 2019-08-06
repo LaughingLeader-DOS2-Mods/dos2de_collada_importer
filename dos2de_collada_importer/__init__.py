@@ -43,6 +43,7 @@ class DivinityImporterAddonPreferences(AddonPreferences):
         row.label(text="General:", icon="OUTLINER_DATA_META")
         row = box.row()
         row.prop(self, "divine_path")
+        row = box.row()
         row.prop(self, "extracted_assets_dir")
 
 
