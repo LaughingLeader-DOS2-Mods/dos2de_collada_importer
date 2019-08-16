@@ -363,12 +363,16 @@ def transform_apply(self, context, obj, location=False, rotation=False, scale=Fa
         for recobj in recurse_targets:
             transform_apply(self, context, recobj, location, rotation, scale, children)
 
+def can_delete(objtype, delete_objects):
+    return (delete_objects == "ALL" or (delete_objects == "ARMATURE" and objtype == "ARMATURE") 
+                or (delete_objects == "MESH" and objtype == "MESH"))
+
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
     action_set_fake_user = args["action_set_fake_user"]
     action_offset_zero = args["action_offset_zero"]
     gr2_conform_enabled = args["gr2_conform_enabled"]
-    delete_objects = args["delete_objects"]
+    delete_objects_options = args["delete_objects"]
     rename_objects = args["rename_objects"]
 
     fix_orientation = args["fix_orientation"]
@@ -429,17 +433,15 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
             print("[DOS2DE-Importer] Applying transformation for object '{}:{}' and children.".format(obj.name, obj.type))
             transform_apply(operator, context, obj, location=True, rotation=True, scale=True, children=True)
 
-    if delete_objects != "DISABLED":
-        delete_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
+    if delete_objects_options != "DISABLED":
+        delete_objects = list(filter(lambda obj: not obj in ignored_objects and can_delete(obj.type, delete_objects_options), context.scene.objects.values()))
         print("[DOS2DE-Importer] Deleting '{}' new objects after import.".format(len(delete_objects)))
         for obj in delete_objects:
-            can_delete = (delete_objects == "ALL" or (delete_objects == "ARMATURE" and obj.type == "ARMATURE") or (delete_objects == "MESH" and obj.type == "MESH"))
-            if can_delete:
-                index = bpy.data.objects.find(obj.name)
-                if index > -1:
-                    obj_data = bpy.data.objects[index]
-                    print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
-                    bpy.data.objects.remove(obj_data)
+            index = bpy.data.objects.find(obj.name)
+            if index > -1:
+                obj_data = bpy.data.objects[index]
+                print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
+                bpy.data.objects.remove(obj_data)
     
     if rename_objects != "DISABLED":
         new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
