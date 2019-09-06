@@ -600,10 +600,12 @@ class DOS2DEImporter_GR2_AddConformPath(Operator):
 
     def execute(self, context):
         if self.filepath != "":
-            context.scene.gr2_conform_skeleton_path = self.filepath
-            context.scene.conform_path_changed = True
-            print("[DOS2DE-Importer] Set pathway to '{}.'".format(self.filepath))
-            updated = True
+            settings = getattr(context.scene, "dos2de_importer_settings", None)
+            if settings != None:
+                settings.gr2_conform_skeleton_path = self.filepath
+                settings.conform_path_changed = True
+                print("[DOS2DE-Importer] Set pathway to '{}.'".format(self.filepath))
+                updated = True
         return {'FINISHED'}
 
     def invoke(self, context, event):
