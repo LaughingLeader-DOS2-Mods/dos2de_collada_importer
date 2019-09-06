@@ -260,7 +260,7 @@ class DOS2DEImporterSettings(PropertyGroup):
         #keywords["conform_path_changed"] = "conform_path_changed" in self
         return keywords
 
-    def draw(self, layout, context, filepath=""):
+    def draw(self, layout, context, filepath="", settings_panel=True):
         box = layout.box()
         row = box.row(align=False)
         row.label(text="Import Data Options:", icon="MESH_DATA")
@@ -330,12 +330,17 @@ class DOS2DEImporterSettings(PropertyGroup):
         box = layout.box()
         row = box.row(align=False)
         row.prop(self, "keep_bind_info")
-        row = box.row(align=False)
-        row.prop(self, "filter_search")
-        row = box.row(align=False)
-        row.prop(self, "recursion_level")
-        row = box.row(align=False)
-        row.prop(self, "directory")
+
+        if settings_panel == True:
+            box = layout.box()
+            row = box.row(align=False)
+            row.label(text="Default File Search:", icon="FILE")
+            row = box.row(align=False)
+            row.prop(self, "filter_search")
+            row = box.row(align=False)
+            row.prop(self, "recursion_level")
+            row = box.row(align=False)
+            row.prop(self, "directory")
 
 
 def transform_apply(self, context, obj, location=False, rotation=False, scale=False, children=False):
@@ -700,7 +705,7 @@ class ImportDivinityCollada(bpy.types.Operator, ImportHelper):
         layout = self.layout
         #settings = getattr(context.scene, "settings", None)
         if self.settings is not None:
-            self.settings.draw(layout, context, self.filepath)
+            self.settings.draw(layout, context, self.filepath, settings_panel=False)
         else:
             print("[DOS2DE-Importer] settings is None.")
 
