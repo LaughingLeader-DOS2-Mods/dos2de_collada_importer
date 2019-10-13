@@ -15,7 +15,7 @@ import bpy
 
 from bpy.path import display_name_from_filepath
 from bpy.types import Operator, OperatorFileListElement, AddonPreferences, PropertyGroup
-from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, EnumProperty, PointerProperty
+from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, EnumProperty, PointerProperty, FloatProperty
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 
 import os
@@ -205,6 +205,22 @@ class DOS2DEImporterSettings(PropertyGroup):
 		description="Offset animation start frames to begin at frame 1 (Blender's default)",
 		default=True)
 
+    action_clean_enabled = BoolProperty(
+		name="Clean",
+		description="Simplify F-Curves by removing closely spaced keyframes",
+		default=False)
+
+    action_clean_threshold = FloatProperty(
+		name="Threshold",
+		description="The threshold to use when cleaning",
+        precision=4,
+		default=0.001)
+
+    action_clean_channels = BoolProperty(
+		name="Channels",
+		description="Clean channels along with keyframes",
+		default=False)
+
     # GR2 Options
     gr2_delete_dae = BoolProperty(
 		name="Delete DAE",
@@ -257,6 +273,9 @@ class DOS2DEImporterSettings(PropertyGroup):
         keywords["gr2_base_skeleton"] = self.gr2_base_skeleton
         keywords["gr2_conform_skeleton_path"] = self.gr2_conform_skeleton_path
         keywords["conform_path_changed"] = self.conform_path_changed
+        keywords["action_clean_enabled"] = self.action_clean_enabled
+        keywords["action_clean_threshold"] = self.action_clean_threshold
+        keywords["action_clean_channels"] = self.action_clean_channels
         #keywords["conform_path_changed"] = "conform_path_changed" in self
         return keywords
 
@@ -314,6 +333,13 @@ class DOS2DEImporterSettings(PropertyGroup):
         row.prop(self, "action_offset_zero")
         row = box.row()
         row.prop(self, "action_set_fake_user")
+        row = box.row()
+        row.prop(self, "action_clean_enabled")
+        if self.action_clean_enabled:
+            row = box.row()
+            row.prop(self, "action_clean_threshold")
+            row = box.row()
+            row.prop(self, "action_clean_channels")
 
         box = layout.box()
         row = box.row(align=False)
@@ -374,8 +400,13 @@ def can_delete(objtype, delete_objects):
 
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
+
     action_set_fake_user = args["action_set_fake_user"]
     action_offset_zero = args["action_offset_zero"]
+    action_clean_enabled = args["action_clean_enabled"]
+    action_clean_threshold = args["action_clean_threshold"]
+    action_clean_channels = args["action_clean_channels"]
+
     gr2_conform_enabled = args["gr2_conform_enabled"]
     delete_objects_options = args["delete_objects"]
     rename_objects = args["rename_objects"]
@@ -427,6 +458,19 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                         for fc in fcurves:
                             for keyframe in fc.keyframe_points:
                                 keyframe.co.x += 1
+
+                    # if action_clean_enabled:
+                    #     print("[DOS2DE-Importer] Cleaning action. Threshold '{}' Channels '{}'.".format(action_clean_threshold, action_clean_channels))
+                    #     bpy.ops.object.select_all(action='DESELECT')
+                    #     last = bpy.context.scene.objects.active
+                    #     bpy.context.scene.objects.active = ob
+                    #     ob.select = True
+                    #     bpy.ops.object.mode_set(mode="POSE")
+                    #     bpy.ops.action.clean(threshold=action_clean_threshold, channels=action_clean_channels)
+                    #     #bpy.ops.action.clean(0.001, True)
+                    #     bpy.ops.object.mode_set(mode="OBJECT")
+                    #     ob.select = False
+                    #     bpy.context.scene.objects.active = last
 
         else:
             #operator.report({'INFO'}, "[DOS2DE-Importer] No new actions to rename.")
