@@ -371,25 +371,28 @@ class DOS2DEImporterSettings(PropertyGroup):
 
 def transform_apply(self, context, obj, location=False, rotation=False, scale=False, children=False):
     last_active = getattr(bpy.context.scene.objects, "active", None)
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.scene.objects.active = obj
-    obj.select = True
-    bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
-
     recurse_targets = []
-    if children:
-        for childobj in obj.children:
-            childobj.select = True
-            if childobj.children is not None:
-                recurse_targets.append(childobj)
-        bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.select_all(action='DESELECT')
-    obj.select = False
+        bpy.context.scene.objects.active = obj
+        obj.select = True
+        bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+
+        if children:
+            for childobj in obj.children:
+                childobj.select = True
+                if childobj.children is not None:
+                    recurse_targets.append(childobj)
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.transform_apply(location=location, rotation=rotation, scale=scale)
+            bpy.ops.object.select_all(action='DESELECT')
+        obj.select = False
+    except:
+        pass
 
     if last_active is not None:
         bpy.context.scene.objects.active = last_active
-
     if len(recurse_targets) > 0:
         for recobj in recurse_targets:
             transform_apply(self, context, recobj, location, rotation, scale, children)
