@@ -187,7 +187,7 @@ class DOS2DEImporterSettings(PropertyGroup):
     keep_bind_info = BoolProperty(
 		name="Keep Bind Info",
 		description="Store Bindpose information in custom bone properties for later use during Collada export",
-		default=False)
+		default=True)
 
     # Animation Options
     action_autorename = BoolProperty(
