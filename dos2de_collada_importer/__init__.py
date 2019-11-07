@@ -156,7 +156,7 @@ class DOS2DEImporterSettings(PropertyGroup):
 			("FILE", "Filename", "Use the name of the file, prefixed with the object type"),
 			("DISABLED", "Disabled", "")
 		),
-		default="DISABLED"
+		default="FILE"
     )
 
     auto_connect = BoolProperty(
@@ -401,6 +401,31 @@ def can_delete(objtype, delete_objects):
     return (delete_objects == "ALL" or (delete_objects == "ARMATURE" and objtype == "ARMATURE") 
                 or (delete_objects == "MESH" and objtype == "MESH"))
 
+import re
+lastNum = re.compile(r'(?:[^\d]*(\d+)[^\d]*)+')
+
+def increment_string(s):
+    m = lastNum.search(s)
+    if m:
+        next = str(int(m.group(1))+1)
+        start, end = m.span(1)
+        s = s[:max(end-len(next), start)] + next + s[end:]
+    else:
+        s = s + "_1"
+    return s
+
+def safe_rename(obj, context, next_name):
+    if obj.type == "ARMATURE":
+        for check in bpy.data.armatures:
+            if check != obj.data and check.name == next_name:
+                next_name = increment_string(next_name)
+    elif obj.type == "MESH":
+        for check in bpy.data.meshes:
+            if check != obj.data and check.name == next_name:
+                next_name = increment_string(next_name)
+    obj.name = next_name
+    obj.data.name = next_name
+
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
 
@@ -513,8 +538,7 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                         next_name = next_name.replace(pattern[0], pattern[1])
                 if next_name != "":
                     print("[DOS2DE-Importer] Renaming object '{} => {}'.".format(obj.name, next_name))
-                    obj.name = next_name
-                    #obj.data.name = obj.name
+                    safe_rename(obj, context, next_name)
 
     return True
 
