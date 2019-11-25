@@ -20,6 +20,7 @@ from bpy_extras.io_utils import ImportHelper, ExportHelper
 
 import os
 import subprocess
+import re
 
 class DivinityImporterAddonPreferences(AddonPreferences):
     bl_idname = "dos2de_collada_importer"
@@ -96,6 +97,62 @@ rename_patterns = [
     ("Lizards_Female", "LF"),
     ("Lizards_Male", "LM")
 ]
+
+hero_pattern = re.compile(r'.*(Dwarves|Elves|Humans|Lizards)_(Male|Female)')
+
+texture_pattern_basecolor = "{}.*?_(BM|BMA).dds"
+texture_pattern_mskcloth = "{}.*?_(MSKcloth).dds"
+texture_pattern_mskskin = "{}.*?_(MSKskin).dds"
+texture_pattern_normalmap = "{}.*?_(NM).dds"
+texture_pattern_physical = "{}.*?_(PM).dds"
+
+class DOS2_Material_Textures():
+    def __init__(self, bm=None, nm=None, pm=None):
+        self.basecolor = bm
+        self.normalmap = nm
+        self.physicalmap = pm
+        self.textures = [bm,nm,pm]
+
+def get_textures(obj, file, context, assets_dir):
+    textures = None
+    m = hero_pattern.match(file)
+    if m != None:
+        race = m.group(1)
+        gender = m.group(2)
+        racegender = "{}_{}".format(race, gender)
+        textures_dir = os.path.join(assets_dir, "Textures/Characters/{}/{}".format(race, racegender))
+        if os.path.isdir(textures_dir):
+            filename = bpy.path.basename(file)
+            bm_pattern = re.compile(texture_pattern_basecolor.format(filename))
+            nm_pattern = re.compile(texture_pattern_normalmap.format(filename))
+            pm_pattern = re.compile(texture_pattern_physical.format(filename))
+            files = [f for f in os.listdir(textures_dir) if f.endswith(".dds")]
+            basemap_texture = next([f for f in files if bm_pattern.match(f)])
+            normalmap_texture = next([f for f in files if nm_pattern.match(f)])
+            physicalmap_texture = next([f for f in files if pm_pattern.match(f)])
+            textures = DOS2_Material_Textures(basemap_texture, normalmap_texture, physicalmap_texture)
+    return textures
+
+def create_material(obj, file, context, assets_dir):
+    textures = get_textures(obj, file, context, assets_dir)
+    if textures != None:
+        mat = bpy.data.materials.new(name="{}_DOS2DE_PBR".format(obj.name))
+        obj.data.materials.append(mat)
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+        diffuse.location = (50,0)
+
+def build_materials(obj_file_pairs, context):
+    assets_dir = ""
+    if "dos2de_collada_importer" in context.user_preferences.addons:
+        preferences = context.user_preferences.addons["dos2de_collada_importer"].preferences
+        if preferences is not None:
+            if "extracted_assets_dir" in preferences:
+                assets_dir = preferences.extracted_assets_dir
+    if assets_dir != "" and os.path.isdir(assets_dir):
+        for obj,file in obj_file_pairs:
+            create_material(obj, file, context, assets_dir)
 
 class DOS2DEImporterSettings(PropertyGroup):
     bl_label = "Divinity Collada Importer"
@@ -401,7 +458,6 @@ def can_delete(objtype, delete_objects):
     return (delete_objects == "ALL" or (delete_objects == "ARMATURE" and objtype == "ARMATURE") 
                 or (delete_objects == "MESH" and objtype == "MESH"))
 
-import re
 lastNum = re.compile(r'(?:[^\d]*(\d+)[^\d]*)+')
 
 def increment_string(s):
@@ -528,18 +584,21 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
             filename = filename[:index_of_dot]
 
         for obj in new_objects:
+            name_prefix = ""
+            next_name = ""
             if obj.type == "ARMATURE":
-                next_name = ""
-                if rename_objects == "FILE":
-                    next_name = "Armature_{}".format(filename)
-                elif rename_objects == "SHORTHAND":
-                    next_name = "Armature_{}".format(filename)
-                    for pattern in rename_patterns:
-                        next_name = next_name.replace(pattern[0], pattern[1])
-                if next_name != "":
-                    print("[DOS2DE-Importer] Renaming object '{} => {}'.".format(obj.name, next_name))
-                    safe_rename(obj, context, next_name)
-
+                name_prefix = "Arm_"
+            elif obj.type == "MESH":
+                pass
+            if rename_objects == "FILE":
+                next_name = "{}{}".format(name_prefix, filename)
+            elif rename_objects == "SHORTHAND":
+                next_name = "{}{}".format(name_prefix, filename)
+                for pattern in rename_patterns:
+                    next_name = next_name.replace(pattern[0], pattern[1])
+            if next_name != "":
+                print("[DOS2DE-Importer] Renaming object '{} => {}'.".format(obj.name, next_name))
+                safe_rename(obj, context, next_name)
     return True
 
 def import_granny(operator, context, load_filepath, divine_path, **args):
