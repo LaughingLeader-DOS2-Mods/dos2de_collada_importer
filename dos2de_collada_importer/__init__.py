@@ -87,7 +87,7 @@ def get_base_skeletons(scene, context):
 
     return skeletons
 
-rename_patterns = [
+rename_race_patterns = [
     ("Dwarves_Female", "DF"), 
     ("Dwarves_Male", "DM"),
     ("Elves_Female", "EF"),
@@ -96,6 +96,10 @@ rename_patterns = [
     ("Humans_Male", "HM"),
     ("Lizards_Female", "LF"),
     ("Lizards_Male", "LM")
+]
+
+rename_patterns = [
+    ("_MeshShape", "")
 ]
 
 hero_pattern = re.compile(r'.*(Dwarves|Elves|Humans|Lizards)_(Male|Female)')
@@ -113,46 +117,230 @@ class DOS2_Material_Textures():
         self.physicalmap = pm
         self.textures = [bm,nm,pm]
 
-def get_textures(obj, file, context, assets_dir):
+def get_textures(obj, filename, context, assets_dir):
     textures = None
-    m = hero_pattern.match(file)
+    m = hero_pattern.match(filename)
     if m != None:
         race = m.group(1)
         gender = m.group(2)
         racegender = "{}_{}".format(race, gender)
         textures_dir = os.path.join(assets_dir, "Textures/Characters/{}/{}".format(race, racegender))
         if os.path.isdir(textures_dir):
-            filename = bpy.path.basename(file)
             bm_pattern = re.compile(texture_pattern_basecolor.format(filename))
             nm_pattern = re.compile(texture_pattern_normalmap.format(filename))
             pm_pattern = re.compile(texture_pattern_physical.format(filename))
-            files = [f for f in os.listdir(textures_dir) if f.endswith(".dds")]
-            basemap_texture = next([f for f in files if bm_pattern.match(f)])
-            normalmap_texture = next([f for f in files if nm_pattern.match(f)])
-            physicalmap_texture = next([f for f in files if pm_pattern.match(f)])
-            textures = DOS2_Material_Textures(basemap_texture, normalmap_texture, physicalmap_texture)
-    return textures
+            files = list([f for f in os.listdir(textures_dir) if f.endswith(".dds")])
+            basemap_texture = next(iter([f for f in files if bm_pattern.match(f)]), None)
+            normalmap_texture = next(iter([f for f in files if nm_pattern.match(f)]), None)
+            physicalmap_texture = next(iter([f for f in files if pm_pattern.match(f)]), None)
+            if basemap_texture != None:
+                basemap_texture = os.path.join(textures_dir, basemap_texture)
+            if normalmap_texture != None:
+                normalmap_texture = os.path.join(textures_dir, normalmap_texture)
+            if physicalmap_texture != None:
+                physicalmap_texture = os.path.join(textures_dir, physicalmap_texture)
+            tex = DOS2_Material_Textures(
+                bm=basemap_texture, 
+                nm=normalmap_texture, 
+                pm=physicalmap_texture
+            )
+    return tex
 
-def create_material(obj, file, context, assets_dir):
-    textures = get_textures(obj, file, context, assets_dir)
-    if textures != None:
-        mat = bpy.data.materials.new(name="{}_DOS2DE_PBR".format(obj.name))
-        obj.data.materials.append(mat)
-        mat.use_nodes = True
-        nodes = mat.node_tree.nodes
-        diffuse = nodes.new("ShaderNodeBsdfDiffuse")
-        diffuse.location = (50,0)
+def float_lerp(a, b, t):
+    return (1.0 - t) * a + t * b
 
-def build_materials(obj_file_pairs, context):
-    assets_dir = ""
-    if "dos2de_collada_importer" in context.user_preferences.addons:
-        preferences = context.user_preferences.addons["dos2de_collada_importer"].preferences
-        if preferences is not None:
-            if "extracted_assets_dir" in preferences:
-                assets_dir = preferences.extracted_assets_dir
-    if assets_dir != "" and os.path.isdir(assets_dir):
-        for obj,file in obj_file_pairs:
-            create_material(obj, file, context, assets_dir)
+def sum_heights(nodes_array):
+    result = 0
+    for node in nodes_array:
+        result = result + node.height
+    return result
+
+def sum_widths(depth_nodes):
+    result = 0
+    for depth in depth_nodes:
+        max_width = 0
+        for node in depth_nodes[depth]:
+            if max_width < node.width:
+                max_width = node.width
+        result = result + max_width
+    return result
+
+def calc_priority_by_socket(node):
+    if len(node.inputs) is 0:
+        return -9999
+    if len(node.outputs) is 0:
+        return 9999
+
+    result = 0
+    for in_socket in node.inputs:
+        if in_socket.is_linked:
+            for link in in_socket.links:
+                if link.is_valid:
+                    if len(link.from_node.inputs) is 0:
+                        result -= 1
+                    else:
+                        result += 2
+
+    for out_socket in node.outputs:
+        if out_socket.is_linked:
+            for link in out_socket.links:
+                if link.is_valid:
+                    if len(link.to_node.outputs) is 0:
+                        result += 10
+                    else:
+                        result -= 1
+
+    return result
+
+def arrange_nodes(node_array, calc_priority, horiz_padding=0.125, vert_padding=0.125):
+
+    # Create a dictionary where the key is the
+    # depth and the value is an array of nodes.
+    depth_nodes = {}
+    for node in node_array:
+
+        depth = calc_priority(node)
+        if depth in depth_nodes:
+
+            # Add the node to the node array at that depth.
+            depth_nodes[depth].append(node)
+        else:
+
+            # Begin a new array.
+            depth_nodes[depth] = [node]
+
+    # Add padding to half the width.
+    extents_w = (0.5 + horiz_padding) * sum_widths(depth_nodes)
+    t_w_max = 0.5
+    sz0 = len(depth_nodes)
+    if sz0 > 1:
+        t_w_max = 1.0 / (sz0 - 1)
+
+    # List of dictionary KVPs.
+    depths = sorted(depth_nodes.items())
+    depths_range = range(0, sz0, 1)
+    for i in depths_range:
+        nodes_array = depths[i][1]
+        t_w = i * t_w_max
+        x = float_lerp(-extents_w, extents_w, t_w)
+
+        extents_h = (0.5 + vert_padding) * sum_heights(nodes_array)
+        t_h_max = 0.5
+        sz1 = len(nodes_array)
+        if sz1 > 1:
+            t_h_max = 1.0 / (sz1 - 1)
+
+        nodes_range = range(0, sz1, 1)
+        for j in nodes_range:
+            node = nodes_array[j]
+            t_h = j * t_h_max
+            y = float_lerp(-extents_h, extents_h, t_h)
+            half_w = 0.5 * node.width
+            half_h = 0.5 * node.height
+            node.location.xy = (x - half_w, y - half_h)
+
+def get_image(file, context):
+    if file != "" and file != None:
+        for img in bpy.data.images:
+            if img.filepath != "" and img.filepath != None:
+                if img.filepath == file:
+                    return img
+                elif bpy.path.basename(img.filepath) == bpy.path.basename(file):
+                    img.filepath = file
+                    return img
+        print("Loading image: " + file)
+        img = bpy.data.images.load(file, check_existing=True)
+        return img
+    return None
+
+def get_node_type(nodes, type):
+    return next(iter([x for x in nodes if x.bl_idname == type]), None)
+
+def offset_node_x(node, bynode, padding=50):
+    node.location[0] = (bynode.location[0] + bynode.width) + padding
+    node.location[1] = bynode.location[1]
+
+def offset_node_y(node, bynode, padding=200):
+    node.location[1] = (bynode.location[1] - bynode.height) - padding
+    node.location[0] = bynode.location[0]
+
+def create_material(mat_name, obj, file, context, assets_dir):
+    if True:
+        textures = get_textures(obj, file, context, assets_dir)
+        if textures != None:
+            mat = bpy.data.materials.new(mat_name)
+            obj.data.materials.append(mat)
+            mat.use_nodes = True
+
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+
+            diffuse = get_node_type(nodes, "ShaderNodeBsdfDiffuse")
+            if diffuse is not None:
+                #diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+                nodes.remove(diffuse)
+            shader = nodes.new("ShaderNodeBsdfPrincipled")
+            #diffuse.location = (50,0)
+
+            bm_input = 0
+            nm_input = 14
+            metal_input = 4
+            roughness_input = 7
+
+            bm_node = nodes.new("ShaderNodeTexImage")
+            bm_node.location = (10,0)
+            bm_node.label = "BaseColor"
+            bm_tex = get_image(textures.basecolor, context)
+            bm_node.image = bm_tex
+            links.new(bm_node.outputs[0], shader.inputs[bm_input])
+
+            pm_node = nodes.new("ShaderNodeTexImage")
+            offset_node_y(pm_node, bm_node)
+            pm_node.label = "PhysicalMap"
+            pm_tex = get_image(textures.physicalmap, context)
+            pm_node.image = pm_tex
+            pm_node.color_space = "NONE"
+            pmsep_node = nodes.new("ShaderNodeSeparateXYZ")
+            offset_node_x(pmsep_node, pm_node)
+            links.new(pm_node.outputs[0], pmsep_node.inputs[0])
+            links.new(pmsep_node.outputs[0], shader.inputs[metal_input])
+            links.new(pmsep_node.outputs[1], shader.inputs[roughness_input])
+
+            nm_node = nodes.new("ShaderNodeTexImage")
+            offset_node_y(nm_node, pm_node)
+            nm_node.label = "NormalMap"
+            nm_tex = get_image(textures.normalmap, context)
+            nm_node.image = nm_tex
+            nm_node.color_space = "NONE"
+
+            sep_node = nodes.new("ShaderNodeSeparateXYZ")
+            offset_node_x(sep_node, nm_node)
+            invert_node = nodes.new("ShaderNodeInvert")
+            offset_node_x(invert_node, sep_node)
+            combine_node = nodes.new("ShaderNodeCombineXYZ")
+            offset_node_x(combine_node, invert_node)
+            vector_node = nodes.new("ShaderNodeNormalMap")
+            offset_node_x(vector_node, combine_node)
+            links.new(nm_node.outputs[0], sep_node.inputs[0])
+            links.new(nm_node.outputs[1], combine_node.inputs[0]) # Alpha to Red Channel
+            links.new(sep_node.outputs[1], invert_node.inputs[1]) # Invert Green for OpenGL
+            links.new(sep_node.outputs[2], combine_node.inputs[2]) # Blue to Blue Channel
+            links.new(invert_node.outputs[0], combine_node.inputs[1]) # Inverted Green to Green Channel
+            links.new(combine_node.outputs[0], vector_node.inputs[0]) # Combined XYZ to Normal Map
+            links.new(vector_node.outputs[0], shader.inputs[nm_input])
+
+            offset_node_x(shader, vector_node)
+            shader.location[1] = bm_node.location[1]
+
+            output = get_node_type(nodes, "ShaderNodeOutputMaterial")
+            offset_node_x(output, shader)
+            links.new(shader.outputs[0], output.inputs[0])
+
+            #arrange_nodes(nodes, calc_priority_by_socket)
+        return True
+    #except Exception as e:
+    #    print("[DOS2DE-Importer:create_material] Error creating material for '{}':\n    {}".format(obj.name, e))
+    #    return False
 
 class DOS2DEImporterSettings(PropertyGroup):
     bl_label = "Divinity Collada Importer"
@@ -204,17 +392,41 @@ class DOS2DEImporterSettings(PropertyGroup):
 		default="DISABLED"
 	)
 
-    rename_objects = EnumProperty(
-		name="Rename",
-		description="Rename new objects with the chosen pattern",
+    rename_armatures = EnumProperty(
+		name="Armatures",
+		description="Rename new armatures with the chosen pattern",
 		items=(
 			("SHORTHAND", "Race Shorthand", 
 				"For Divinity models designed for a race/gender, turns the name into a shorthand, i.e. Humans_Female becomes HF"),
 			("FILE", "Filename", "Use the name of the file, prefixed with the object type"),
+			("FILE_SHORTHAND", "Filename & Shorthand", "Use the name of the file and replace race patterns"),
 			("DISABLED", "Disabled", "")
 		),
-		default="FILE"
+		default="FILE_SHORTHAND"
     )
+
+    rename_meshes = EnumProperty(
+		name="Meshes",
+		description="Rename new meshes with the chosen pattern",
+		items=(
+			("SHORTHAND", "Race Shorthand", 
+				"For Divinity models designed for a race/gender, turns the name into a shorthand, i.e. Humans_Female becomes HF"),
+			("FILE", "Filename", "Use the name of the file, prefixed with the object type"),
+            ("FILE_SHORTHAND", "Filename & Shorthand", "Use the name of the file and replace race patterns"),
+			("DISABLED", "Disabled", "")
+		),
+		default="SHORTHAND"
+    )
+
+    use_rename_junk = BoolProperty(
+		name="Replace Fluff",
+		description="Rename fluff in imported object names, such as 'MeshShape' for meshes",
+		default=True)
+
+    use_build_material = BoolProperty(
+		name="Create Materials",
+		description="Automatically find associated textures and build materials. Only guaranteed to work if names match and the Shared assets directory is set",
+		default=True)
 
     auto_connect = BoolProperty(
 		name="Auto Connect",
@@ -314,7 +526,10 @@ class DOS2DEImporterSettings(PropertyGroup):
         keywords["filter_search"] = self.filter_search
         keywords["apply_transformation"] = self.apply_transformation
         keywords["delete_objects"] = self.delete_objects
-        keywords["rename_objects"] = self.rename_objects
+        keywords["rename_armatures"] = self.rename_armatures
+        keywords["rename_meshes"] = self.rename_meshes
+        keywords["use_rename_junk"] = self.use_rename_junk
+        keywords["use_build_material"] = self.use_build_material
         keywords["auto_connect"] = self.auto_connect
         keywords["find_chains"] = self.find_chains
         keywords["min_chain_length"] = self.min_chain_length
@@ -345,9 +560,19 @@ class DOS2DEImporterSettings(PropertyGroup):
         row = box.row()
         row.prop(self, "apply_transformation")
         row = box.row()
-        row.prop(self, "rename_objects")
-        row = box.row()
         row.prop(self, "delete_objects")
+        row = box.row()
+        row.prop(self, "use_build_material")
+
+        box = layout.box()
+        row = box.row(align=False)
+        row.label(text="Rename Options:", icon="AUTOMERGE_ON")
+        row = box.row()
+        row.prop(self, "rename_armatures")
+        row = box.row()
+        row.prop(self, "rename_meshes")
+        row = box.row()
+        row.prop(self, "use_rename_junk")
 
         box = layout.box()
         row = box.row(align=False)
@@ -484,6 +709,7 @@ def safe_rename(obj, context, next_name):
 
 def import_collada(operator, context, load_filepath, rename_temp=False, **args):
     rename_actions = args["action_autorename"]
+    use_build_material = args["use_build_material"]
 
     action_set_fake_user = args["action_set_fake_user"]
     action_offset_zero = args["action_offset_zero"]
@@ -493,7 +719,9 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
 
     gr2_conform_enabled = args["gr2_conform_enabled"]
     delete_objects_options = args["delete_objects"]
-    rename_objects = args["rename_objects"]
+    rename_armatures = args["rename_armatures"]
+    rename_meshes = args["rename_meshes"]
+    use_rename_junk = args["use_rename_junk"]
 
     fix_orientation = args["fix_orientation"]
     auto_connect = args["auto_connect"]
@@ -576,7 +804,9 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
                 print("[DOS2DE-Importer] Deleting object '{}:{}'.".format(obj.name, obj.type))
                 bpy.data.objects.remove(obj_data)
     
-    if rename_objects != "DISABLED":
+    rename_objects = (rename_armatures != "DISABLED" or rename_meshes != "DISABLED")
+
+    if rename_objects == True:
         new_objects = list(filter(lambda obj: not obj in ignored_objects, context.scene.objects.values()))
         filename = os.path.basename(load_filepath).replace("-temp", "")
         index_of_dot = filename.index('.')
@@ -586,19 +816,49 @@ def import_collada(operator, context, load_filepath, rename_temp=False, **args):
         for obj in new_objects:
             name_prefix = ""
             next_name = ""
+            rename_option = "DISABLED"
             if obj.type == "ARMATURE":
-                name_prefix = "Arm_"
-            elif obj.type == "MESH":
-                pass
-            if rename_objects == "FILE":
-                next_name = "{}{}".format(name_prefix, filename)
-            elif rename_objects == "SHORTHAND":
-                next_name = "{}{}".format(name_prefix, filename)
-                for pattern in rename_patterns:
-                    next_name = next_name.replace(pattern[0], pattern[1])
-            if next_name != "":
-                print("[DOS2DE-Importer] Renaming object '{} => {}'.".format(obj.name, next_name))
-                safe_rename(obj, context, next_name)
+                rename_option = rename_armatures
+            if obj.type == "MESH":
+                rename_option = rename_meshes
+
+            if rename_option != "DISABLED":
+                if obj.type == "ARMATURE":
+                    name_prefix = "Arm_"
+                elif obj.type == "MESH":
+                    pass
+                if rename_option == "FILE" or rename_option == "FILE_SHORTHAND":
+                    next_name = "{}{}".format(name_prefix, filename)
+                elif rename_option == "SHORTHAND":
+                    next_name = "{}{}".format(name_prefix, obj.name)
+                if rename_option == "SHORTHAND" or rename_option == "FILE_SHORTHAND":
+                    for pattern in rename_race_patterns:
+                        next_name = next_name.replace(pattern[0], pattern[1])
+                if next_name != "":
+                    if use_rename_junk:
+                        for pattern in rename_patterns:
+                            next_name = next_name.replace(pattern[0], pattern[1])
+                    print("[DOS2DE-Importer] Renaming object '{} => {}'.".format(obj.name, next_name))
+                    safe_rename(obj, context, next_name)
+
+    if use_build_material:
+        assets_dir = ""
+        if "dos2de_collada_importer" in context.user_preferences.addons:
+            preferences = context.user_preferences.addons["dos2de_collada_importer"].preferences
+            if preferences is not None:
+                if "extracted_assets_dir" in preferences:
+                    assets_dir = preferences.extracted_assets_dir
+        if assets_dir != "":
+            check_findname = os.path.basename(load_filepath).replace("-temp.dae", "")
+            new_meshes = list(filter(lambda obj: not obj in ignored_objects and obj.type == "MESH", context.scene.objects.values()))
+            for mesh in new_meshes:
+                mat_name="{}_DOS2DE_PBR".format(obj.name)
+                mat = bpy.data.materials.get(mat_name)
+                if mat is None:
+                    if create_material(mat_name, mesh, check_findname, context, assets_dir):
+                        print("[DOS2DE-Importer] Created material for '{}'".format(mesh.name))
+                else:
+                    mesh.data.materials.append(mat)
     return True
 
 def import_granny(operator, context, load_filepath, divine_path, **args):
