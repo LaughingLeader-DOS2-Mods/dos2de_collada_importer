@@ -426,7 +426,7 @@ class DOS2DEImporterSettings(PropertyGroup):
     use_build_material = BoolProperty(
 		name="Create Materials",
 		description="Automatically find associated textures and build materials. Only guaranteed to work if names match and the Shared assets directory is set",
-		default=True)
+		default=False)
 
     auto_connect = BoolProperty(
 		name="Auto Connect",
