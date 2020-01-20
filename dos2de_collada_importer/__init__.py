@@ -139,12 +139,14 @@ def get_textures(obj, filename, context, assets_dir):
                 normalmap_texture = os.path.join(textures_dir, normalmap_texture)
             if physicalmap_texture != None:
                 physicalmap_texture = os.path.join(textures_dir, physicalmap_texture)
-            tex = DOS2_Material_Textures(
+            textures = DOS2_Material_Textures(
                 bm=basemap_texture, 
                 nm=normalmap_texture, 
                 pm=physicalmap_texture
             )
-    return tex
+    else:
+        textures = DOS2_Material_Textures()
+    return textures
 
 def float_lerp(a, b, t):
     return (1.0 - t) * a + t * b
