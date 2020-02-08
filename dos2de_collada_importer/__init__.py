@@ -270,7 +270,7 @@ def offset_node_y(node, bynode, padding=200):
     node.location[1] = (bynode.location[1] - bynode.height) - padding
     node.location[0] = bynode.location[0]
 
-def create_dos2de_nodes(mat, textures=None):
+def create_dos2de_nodes(mat, context, textures=None):
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
 
@@ -358,7 +358,7 @@ def create_material(mat_name, obj, file, context, assets_dir):
         mat = bpy.data.materials.new(mat_name)
         obj.data.materials.append(mat)
         mat.use_nodes = True
-        create_dos2de_nodes(mat, textures)
+        create_dos2de_nodes(mat, context, textures)
 
             #arrange_nodes(nodes, calc_priority_by_socket)
         return True
@@ -378,7 +378,7 @@ class DOS2DE_IMPORTER_OT_nodes_create_material(Operator):
 
     def execute(self, context):
         mat = context.active_object.active_material
-        create_dos2de_nodes(mat)
+        create_dos2de_nodes(mat, context)
         return {'FINISHED'}
 
     def draw(self, context):
