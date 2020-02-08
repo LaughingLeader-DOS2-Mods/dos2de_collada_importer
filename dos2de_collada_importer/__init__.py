@@ -14,7 +14,7 @@ bl_info = {
 import bpy
 
 from bpy.path import display_name_from_filepath
-from bpy.types import Operator, OperatorFileListElement, AddonPreferences, PropertyGroup
+from bpy.types import Operator, OperatorFileListElement, AddonPreferences, PropertyGroup, Panel
 from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, EnumProperty, PointerProperty, FloatProperty
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 
@@ -255,8 +255,12 @@ def get_image(file, context):
         return img
     return None
 
-def get_node_type(nodes, type):
-    return next(iter([x for x in nodes if x.bl_idname == type]), None)
+def get_node_type(nodes, name):
+    for x in nodes:
+        print("{} ? {}".format(x.bl_idname, name))
+        if name in x.bl_idname:
+            return x
+    return None
 
 def offset_node_x(node, bynode, padding=50):
     node.location[0] = (bynode.location[0] + bynode.width) + padding
@@ -266,83 +270,143 @@ def offset_node_y(node, bynode, padding=200):
     node.location[1] = (bynode.location[1] - bynode.height) - padding
     node.location[0] = bynode.location[0]
 
+def create_dos2de_nodes(mat, textures=None):
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+
+    diffuse = get_node_type(nodes, "ShaderNodeBsdfDiffuse")
+    if diffuse is not None:
+        #diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+        nodes.remove(diffuse)
+    shader = nodes.new("ShaderNodeBsdfPrincipled")
+    #diffuse.location = (50,0)
+
+    bm_input = 0
+    nm_input = 17
+    metal_input = 4
+    roughness_input = 7
+
+    index = 0
+    for inputnode in shader.inputs:
+        if inputnode.name == "Normal":
+            nm_input = index
+        elif inputnode.name == "Roughness":
+            roughness_input = index
+        elif inputnode.name == "Metalness":
+            metal_input = index
+        elif inputnode.name == "Base Color":
+            bm_input = index
+        index = index + 1
+
+    bm_node = nodes.new("ShaderNodeTexImage")
+    bm_node.location = (10,0)
+    bm_node.label = "BaseColor"
+    if textures != None:
+        bm_tex = get_image(textures.basecolor, context)
+        bm_node.image = bm_tex
+    links.new(bm_node.outputs[0], shader.inputs[bm_input])
+
+    pm_node = nodes.new("ShaderNodeTexImage")
+    offset_node_y(pm_node, bm_node)
+    pm_node.label = "PhysicalMap"
+    if textures != None:
+        pm_tex = get_image(textures.physicalmap, context)
+        pm_node.image = pm_tex
+    pm_node.color_space = "NONE"
+    pmsep_node = nodes.new("ShaderNodeSeparateXYZ")
+    offset_node_x(pmsep_node, pm_node)
+    links.new(pm_node.outputs[0], pmsep_node.inputs[0])
+    links.new(pmsep_node.outputs[0], shader.inputs[metal_input])
+    links.new(pmsep_node.outputs[1], shader.inputs[roughness_input])
+
+    nm_node = nodes.new("ShaderNodeTexImage")
+    offset_node_y(nm_node, pm_node)
+    nm_node.label = "NormalMap"
+    if textures != None:
+        nm_tex = get_image(textures.normalmap, context)
+        nm_node.image = nm_tex
+    nm_node.color_space = "NONE"
+
+    sep_node = nodes.new("ShaderNodeSeparateXYZ")
+    offset_node_x(sep_node, nm_node)
+    invert_node = nodes.new("ShaderNodeInvert")
+    offset_node_x(invert_node, sep_node)
+    combine_node = nodes.new("ShaderNodeCombineXYZ")
+    offset_node_x(combine_node, invert_node)
+    vector_node = nodes.new("ShaderNodeNormalMap")
+    offset_node_x(vector_node, combine_node)
+    links.new(nm_node.outputs[0], sep_node.inputs[0])
+    links.new(nm_node.outputs[1], combine_node.inputs[0]) # Alpha to Red Channel
+    links.new(sep_node.outputs[1], invert_node.inputs[1]) # Invert Green for OpenGL
+    links.new(sep_node.outputs[2], combine_node.inputs[2]) # Blue to Blue Channel
+    links.new(invert_node.outputs[0], combine_node.inputs[1]) # Inverted Green to Green Channel
+    links.new(combine_node.outputs[0], vector_node.inputs[0]) # Combined XYZ to Normal Map
+    links.new(vector_node.outputs[0], shader.inputs[nm_input])
+
+    offset_node_x(shader, vector_node)
+    shader.location[1] = bm_node.location[1]
+
+    output = get_node_type(nodes, "ShaderNodeOutputMaterial")
+    if output is None:
+        output = nodes.new("ShaderNodeOutputMaterial")
+    offset_node_x(output, shader)
+    links.new(shader.outputs[0], output.inputs[0])
+
 def create_material(mat_name, obj, file, context, assets_dir):
-    if True:
-        textures = get_textures(obj, file, context, assets_dir)
-        if textures != None:
-            mat = bpy.data.materials.new(mat_name)
-            obj.data.materials.append(mat)
-            mat.use_nodes = True
-
-            nodes = mat.node_tree.nodes
-            links = mat.node_tree.links
-
-            diffuse = get_node_type(nodes, "ShaderNodeBsdfDiffuse")
-            if diffuse is not None:
-                #diffuse = nodes.new("ShaderNodeBsdfDiffuse")
-                nodes.remove(diffuse)
-            shader = nodes.new("ShaderNodeBsdfPrincipled")
-            #diffuse.location = (50,0)
-
-            bm_input = 0
-            nm_input = 14
-            metal_input = 4
-            roughness_input = 7
-
-            bm_node = nodes.new("ShaderNodeTexImage")
-            bm_node.location = (10,0)
-            bm_node.label = "BaseColor"
-            bm_tex = get_image(textures.basecolor, context)
-            bm_node.image = bm_tex
-            links.new(bm_node.outputs[0], shader.inputs[bm_input])
-
-            pm_node = nodes.new("ShaderNodeTexImage")
-            offset_node_y(pm_node, bm_node)
-            pm_node.label = "PhysicalMap"
-            pm_tex = get_image(textures.physicalmap, context)
-            pm_node.image = pm_tex
-            pm_node.color_space = "NONE"
-            pmsep_node = nodes.new("ShaderNodeSeparateXYZ")
-            offset_node_x(pmsep_node, pm_node)
-            links.new(pm_node.outputs[0], pmsep_node.inputs[0])
-            links.new(pmsep_node.outputs[0], shader.inputs[metal_input])
-            links.new(pmsep_node.outputs[1], shader.inputs[roughness_input])
-
-            nm_node = nodes.new("ShaderNodeTexImage")
-            offset_node_y(nm_node, pm_node)
-            nm_node.label = "NormalMap"
-            nm_tex = get_image(textures.normalmap, context)
-            nm_node.image = nm_tex
-            nm_node.color_space = "NONE"
-
-            sep_node = nodes.new("ShaderNodeSeparateXYZ")
-            offset_node_x(sep_node, nm_node)
-            invert_node = nodes.new("ShaderNodeInvert")
-            offset_node_x(invert_node, sep_node)
-            combine_node = nodes.new("ShaderNodeCombineXYZ")
-            offset_node_x(combine_node, invert_node)
-            vector_node = nodes.new("ShaderNodeNormalMap")
-            offset_node_x(vector_node, combine_node)
-            links.new(nm_node.outputs[0], sep_node.inputs[0])
-            links.new(nm_node.outputs[1], combine_node.inputs[0]) # Alpha to Red Channel
-            links.new(sep_node.outputs[1], invert_node.inputs[1]) # Invert Green for OpenGL
-            links.new(sep_node.outputs[2], combine_node.inputs[2]) # Blue to Blue Channel
-            links.new(invert_node.outputs[0], combine_node.inputs[1]) # Inverted Green to Green Channel
-            links.new(combine_node.outputs[0], vector_node.inputs[0]) # Combined XYZ to Normal Map
-            links.new(vector_node.outputs[0], shader.inputs[nm_input])
-
-            offset_node_x(shader, vector_node)
-            shader.location[1] = bm_node.location[1]
-
-            output = get_node_type(nodes, "ShaderNodeOutputMaterial")
-            offset_node_x(output, shader)
-            links.new(shader.outputs[0], output.inputs[0])
+    textures = get_textures(obj, file, context, assets_dir)
+    if textures != None:
+        mat = bpy.data.materials.new(mat_name)
+        obj.data.materials.append(mat)
+        mat.use_nodes = True
+        create_dos2de_nodes(mat, textures)
 
             #arrange_nodes(nodes, calc_priority_by_socket)
         return True
     #except Exception as e:
     #    print("[DOS2DE-Importer:create_material] Error creating material for '{}':\n    {}".format(obj.name, e))
     #    return False
+
+class DOS2DE_IMPORTER_OT_nodes_create_material(Operator):
+    """Insert a basic PBR node setup for DOS2DE textures"""
+    bl_label = "Insert PBR Nodes"
+    bl_idname = "dos2deimporter.nodes_createbasicmaterialoperator"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.active_object.active_material is not None
+
+    def execute(self, context):
+        mat = context.active_object.active_material
+        create_dos2de_nodes(mat)
+        return {'FINISHED'}
+
+    def draw(self, context):
+        pass
+
+    def invoke(self, context, _event):
+        return self.execute(context)
+
+class NODE_PT_dos2de_material_helpers(Panel):
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_label = "DOS2DE Helpers"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.active_object.active_material is not None
+
+    # def draw_header(self, context):
+    #     node = context.active_node
+    #     self.layout.prop(node, "use_custom_color", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        node = context.active_node
+        row = layout.row()
+        col = row.column(align=True)
+        col.operator(DOS2DE_IMPORTER_OT_nodes_create_material.bl_idname)
 
 class DOS2DEImporterSettings(PropertyGroup):
     bl_label = "Divinity Collada Importer"
